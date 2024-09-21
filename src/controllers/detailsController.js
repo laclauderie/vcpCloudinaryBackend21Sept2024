@@ -4,6 +4,7 @@ const Product = require('../models/productsModel');
 const Category = require('../models/categoriesModel');
 const Commerce = require('../models/commercesModel');
 const BusinessOwner = require('../models/businessOwnersModel');
+const cloudinary = require('cloudinary').v2; // Make sure Cloudinary is configured
 
 // Create a new detail
 async function createDetail(req, res) {
@@ -12,8 +13,7 @@ async function createDetail(req, res) {
         const userId = req.user.userId; // Get the logged-in user's ID from the JWT
 
         const { detail_name, description } = req.body; // Get detail information from the request body
-        const image_detail = req.file ? req.file.buffer : null; // Get image if provided
-
+    
         // Retrieve the business owner using the logged-in user's ID
         const businessOwner = await BusinessOwner.findOne({ where: { user_id: userId } });
         if (!businessOwner) {
@@ -39,6 +39,26 @@ async function createDetail(req, res) {
         const product = await Product.findOne({ where: { id: productId, category_id: category.id } });
         if (!product) {
             return res.status(404).json({ error: 'Product not found or does not belong to the category' });
+        }
+
+        let image_detail = null;
+
+        // Handle file upload and update image URL if file is uploaded
+        if (req.file) {
+            try {
+                // Upload the image to Cloudinary with transformations
+                const result = await cloudinary.uploader.upload(req.file.path, {
+                    folder: 'details', // Store in a 'details' folder for organization
+                    transformation: [
+                        { width: 400, height: 400, crop: 'fill' }, // Resize and crop to 400x400 pixels
+                        { quality: 'auto', fetch_format: 'auto' }  // Optimize quality and format
+                    ]
+                });
+                image_detail = result.secure_url; // Save the transformed image URL
+            } catch (uploadError) {
+                console.error('Error uploading image to Cloudinary:', uploadError);
+                return res.status(500).json({ error: 'Error uploading image to Cloudinary' });
+            }
         }
 
         // Create the detail
@@ -148,7 +168,6 @@ async function getDetailById(req, res) {
 async function updateDetail(req, res) {
     try {
         const { detail_name, description } = req.body; // Get non-image detail fields from the request body
-        const image_detail = req.file ? req.file.buffer : null; // Get the image file buffer if present
         const userId = req.user.userId; // Get the logged-in user's ID from the JWT
         const { commerceId, categoryId, productId, detailId } = req.params; // Get commerceId, categoryId, productId, and detailId from route parameters
 
@@ -190,9 +209,23 @@ async function updateDetail(req, res) {
         // Update detail fields
         detail.detail_name = detail_name || detail.detail_name;
         detail.description = description || detail.description;
-        if (image_detail) {
-            detail.image_detail = image_detail;
-        }
+
+        if (req.file) {
+            try {
+                // Upload the image to Cloudinary with transformations
+                const result = await cloudinary.uploader.upload(req.file.path, {
+                    folder: 'details', // Store in a 'details' folder for organization
+                    transformation: [
+                        { width: 400, height: 400, crop: 'fill' }, // Resize and crop to 400x400 pixels
+                        { quality: 'auto', fetch_format: 'auto' }  // Optimize quality and format
+                    ]
+                });
+                detail.image_detail = result.secure_url; // Save the transformed image URL
+            } catch (uploadError) {
+                console.error('Error uploading image to Cloudinary:', uploadError);
+                return res.status(500).json({ error: 'Error uploading image to Cloudinary' });
+            }
+          }
 
         await detail.save();
         res.status(200).json(detail);
@@ -253,6 +286,7 @@ async function deleteDetail(req, res) {
 async function getDetailsByProductIdForNonLoggedUser(req, res) {
     try {
         const { productId } = req.params; // Get productId from route parameters
+        console.log('Requested productId:', productId);
 
         // Retrieve the product
         const product = await Product.findOne({ where: { id: productId } });
@@ -262,6 +296,7 @@ async function getDetailsByProductIdForNonLoggedUser(req, res) {
 
         // Retrieve all details related to the product
         const details = await Detail.findAll({ where: { product_id: productId } });
+        console.log('Retrieved details:', details);
 
         if (!details.length) {
             return res.status(404).json({ error: 'No details found for this product' });
@@ -269,9 +304,11 @@ async function getDetailsByProductIdForNonLoggedUser(req, res) {
 
         res.status(200).json(details);
     } catch (error) {
+        console.error('Error fetching details:', error);
         res.status(500).json({ error: error.message });
     }
 }
+
 
 module.exports = {
     createDetail,

@@ -32,7 +32,7 @@ const Product = sequelize.define('Product', {
     onDelete: 'CASCADE'
   },
   image_product: {
-    type: DataTypes.BLOB('long')
+    type: DataTypes.STRING
   }
 }, {
   tableName: 'products',

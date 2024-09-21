@@ -23,7 +23,7 @@ module.exports = {
         onDelete: 'CASCADE'
       },
       image_category: {
-        type: Sequelize.BLOB('long'),
+        type: Sequelize.STRING,
         allowNull: true
       },
       createdAt: {

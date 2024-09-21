@@ -31,7 +31,7 @@ const Commerce = sequelize.define('Commerce', {
     onDelete: 'CASCADE'
   },
   image_commerce: {
-    type: DataTypes.BLOB('long')
+    type: DataTypes.STRING
   },
   services: {
     type: DataTypes.TEXT('long'), // Use TEXT for SQL Server

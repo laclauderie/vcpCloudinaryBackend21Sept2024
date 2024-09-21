@@ -19,7 +19,7 @@ const BusinessOwner = sequelize.define('BusinessOwner', {
     allowNull: false
   },
   image_owner: {
-    type: DataTypes.BLOB('long')
+    type: DataTypes.STRING
   },
   adresse: {
     type: DataTypes.STRING

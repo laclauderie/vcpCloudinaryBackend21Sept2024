@@ -2,16 +2,16 @@
 const BusinessOwner = require("../models/businessOwnersModel");
 const Commerce = require("../models/commercesModel");
 const Category = require("../models/categoriesModel");
+const cloudinary = require('../config/cloudinaryConfig');
 
 
 // Create category for the logged user
 const createCategoryForUser = async (req, res) => {
   const { category_name, commerce_id } = req.body; // Ensure the necessary data is in the request body
-  const image_category = req.file ? req.file.buffer : null; // Handle file upload
  
   try { 
     // Get the user_id from the authenticated request
-    const { userId } = req.user;
+    const userId = req.user.userId;
 
     // Find the business owner associated with this user
     const businessOwner = await BusinessOwner.findOne({ where: { user_id: userId } });
@@ -32,11 +32,31 @@ const createCategoryForUser = async (req, res) => {
       return res.status(404).json({ error: 'Commerce not found or does not belong to the business owner' });
     }
 
+    let image_category= null;
+
+    // Handle file upload and update image URL if file is uploaded
+    if (req.file) {
+      try {
+        // Upload the image to Cloudinary with transformation (e.g., resizing and cropping)
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: 'categories', // Optional: organize the image in a 'categories' folder in Cloudinary
+          transformation: [
+            { width: 300, height: 300, crop: 'fill' }, // Resize the image to 300x300 and crop to fit
+            { quality: 'auto' } // Optional: automatically adjust image quality for optimization
+          ]
+        });
+        image_category = result.secure_url; // Save the image URL
+      } catch (uploadError) {
+        console.error("Error uploading image to Cloudinary:", uploadError);
+        return res.status(500).json({ error: "Error uploading image to Cloudinary" });
+      }
+    }
+
     // Create the new category
     const newCategory = await Category.create({
       category_name,
       commerce_id: commerce.id,
-      image_category
+      image_category,
     });
 
     // Respond with the newly created category
@@ -130,7 +150,7 @@ const getCategoryByIdForUser = async (req, res) => {
 const updateCategoryForUser = async (req, res) => {
   const { id, commerceId } = req.params; // Capture the category ID and commerce ID from route parameters
   const { category_name } = req.body; // Capture new data for category
-  const image_category = req.file ? req.file.buffer : null; // Capture uploaded image if available
+  
 
   try {
     const userId = req.user.userId;
@@ -172,9 +192,26 @@ const updateCategoryForUser = async (req, res) => {
     }
 
     // Update the category with new data
-    category.category_name = category_name || category.category_name;
-    if (image_category) {
-      category.image_category = image_category;
+    if (category_name !== undefined) {
+      category.category_name = category_name;
+    }
+         
+    // Handle file upload and update image URL if file is uploaded
+     if (req.file) {
+      try {
+        // Upload the image to Cloudinary with transformation (e.g., resizing and cropping)
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: 'categories', // Optional: organize the image in a 'categories' folder
+          transformation: [
+            { width: 300, height: 300, crop: 'fill' }, // Resize to 300x300 and crop
+            { quality: 'auto' } // Auto-optimize quality
+          ]
+        });
+        category.image_category = result.secure_url; // Save the image URL
+      } catch (uploadError) {
+        console.error("Error uploading image to Cloudinary:", uploadError);
+        return res.status(500).json({ error: "Error uploading image to Cloudinary" });
+      }
     }
 
     await category.save();
@@ -267,6 +304,7 @@ const getCategoriesByCommerceIdForNonLoggedUser = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 
 

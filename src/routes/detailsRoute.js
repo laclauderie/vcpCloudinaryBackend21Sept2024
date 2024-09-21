@@ -16,7 +16,7 @@ const router = express.Router();
 router.post(
     '/create-detail/:commerceId/:categoryId/:productId',
     authenticateJWT,
-    upload.single('image_detail'), // Assuming details have images
+    upload.single('image'), // Assuming details have images
     createDetail
 );
 
@@ -38,7 +38,7 @@ router.get(
 router.put(
     '/update-detail/:commerceId/:categoryId/:productId/:detailId',
     authenticateJWT,
-    upload.single('image_detail'), // Assuming details have images
+    upload.single('image'), // Assuming details have images
     updateDetail
 );
 
@@ -53,6 +53,6 @@ router.delete(
 router.get(
     '/public-detail-product/:productId', 
     getDetailsByProductIdForNonLoggedUser
-);
+); 
 
 module.exports = router;

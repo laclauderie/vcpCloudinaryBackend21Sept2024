@@ -1,4 +1,5 @@
 const cron = require('node-cron');
+const { Op } = require('sequelize'); // Import Sequelize operators
 const sequelize = require('../config/sequelize');
 const Payments = require('../models/paymentsModel');
 const BusinessOwnersPayments = require('../models/businessOwnersPaymentsModel');
@@ -17,7 +18,7 @@ const expirePaymentsJob = async () => {
                 model: Payments,
                 where: {
                     expiry_date: {
-                        [sequelize.Op.lt]: new Date()
+                        [Op.lt]: new Date() // Use Op.lt
                     }
                 }
             }],

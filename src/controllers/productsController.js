@@ -3,6 +3,8 @@ const Product = require('../models/productsModel');
 const Category = require('../models/categoriesModel');
 const Commerce = require('../models/commercesModel'); // Ensure this import is here
 const BusinessOwner = require('../models/businessOwnersModel');
+const cloudinary = require('cloudinary').v2; // Make sure Cloudinary is configured
+
 
 async function createProduct(req, res) {
     try {
@@ -10,10 +12,15 @@ async function createProduct(req, res) {
         const { commerceId, categoryId } = req.params;
         const userId = req.user.userId;
 
-        // Handle file path if file is uploaded
-        const image_product = req.file ? req.file.buffer : null; 
+        // Validate required fields
+        if (!product_name || !price) {
+            return res.status(400).json({ error: 'Product name and price are required' });
+        }
 
-        // Retrieve the business owner
+        if (isNaN(price)) {
+            return res.status(400).json({ error: 'Invalid price format' });
+        }
+
         const businessOwner = await BusinessOwner.findOne({ where: { user_id: userId } });
         if (!businessOwner) {
             return res.status(404).json({ error: 'Business owner not found' });
@@ -22,33 +29,59 @@ async function createProduct(req, res) {
             return res.status(403).json({ error: 'Monthly fee not paid' });
         }
 
-        // Retrieve the commerce
         const commerce = await Commerce.findOne({ where: { id: commerceId, business_owner_id: businessOwner.id } });
         if (!commerce) {
             return res.status(404).json({ error: 'Commerce not found or does not belong to the business owner' });
         }
 
-        // Retrieve the category
         const category = await Category.findOne({ where: { id: categoryId, commerce_id: commerce.id } });
         if (!category) {
             return res.status(404).json({ error: 'Category not found or does not belong to the specified commerce' });
         }
 
-        // Create the new product
+        let image_product = null;
+
+        if (req.file) {
+            try {
+                const result = await cloudinary.uploader.upload(req.file.path, {
+                    folder: 'products',
+                    transformation: [
+                        { width: 500, height: 500, crop: 'fill' },
+                        { quality: 'auto', fetch_format: 'auto' }
+                    ]
+                });
+                image_product = result.secure_url;
+            } catch (uploadError) {
+                console.error('Error uploading image to Cloudinary:', uploadError);
+                return res.status(500).json({ error: 'Error uploading image to Cloudinary' });
+            }
+        }
+
+        // Create product
         const newProduct = await Product.create({
             product_name,
             price,
             reference,
             description,
+            commerce_id: commerceId,
             category_id: categoryId,
-            image_product
+            image_product,
         });
 
-        res.status(201).json(newProduct);
+        // Log the created product for debugging
+        console.log('New Product:', newProduct);
+
+        // Send a success response with the created product
+        return res.status(201).json({
+            message: 'Product created successfully',
+            product: newProduct,  // Make sure image URL is sent here
+        });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error('Error creating product:', error);
+        return res.status(500).json({ error: 'Server error' });
     }
 }
+
 
 async function getAllProducts(req, res) {
     try {
@@ -142,8 +175,7 @@ async function updateProduct(req, res) {
         const userId = req.user.userId; // Get the logged-in user's ID from the JWT
 
         const { product_name, price, reference, description } = req.body; // Get product details from the request body
-        const image_product = req.file ? req.file.buffer : null; 
-
+        
         // Retrieve the business owner using the logged-in user's ID
         const businessOwner = await BusinessOwner.findOne({ where: { user_id: userId } });
         if (!businessOwner) {
@@ -173,15 +205,32 @@ async function updateProduct(req, res) {
 
         // Update product details
         product.product_name = product_name || product.product_name;
-        product.price = price || product.price;
+        
+        // Ensure the price is a valid decimal before updating
+        if (price && !isNaN(price)) {
+            product.price = price;
+        }
+        
         product.reference = reference || product.reference;
         product.description = description || product.description;
         product.category_id = categoryId || product.category_id;
 
-        // Update the image if a new file is provided
-        if (image_product) {
-            product.image_product = image_product; // Update the product image path
-        }
+        if (req.file) {
+            try {
+                // Upload the image to Cloudinary with transformations
+                const result = await cloudinary.uploader.upload(req.file.path, {
+                    folder: 'products', // Store in a 'products' folder for organization
+                    transformation: [
+                        { width: 500, height: 500, crop: 'fill' }, // Resize and crop to 500x500 pixels
+                        { quality: 'auto', fetch_format: 'auto' }  // Optimize quality and format
+                    ]
+                });
+                product.image_product = result.secure_url; // Save the transformed image URL
+            } catch (uploadError) {
+                console.error('Error uploading image to Cloudinary:', uploadError);
+                return res.status(500).json({ error: 'Error uploading image to Cloudinary' });
+            }
+          }
 
         await product.save();
         res.status(200).json(product);
@@ -259,11 +308,11 @@ async function getProductsByCategoryIdForNonLoggedUser(req, res) {
             return res.status(200).json([]);
         }
 
-        // Convert image buffers to base64 strings for easy rendering on the client side
+        // No need to convert image_product to base64, return it as is (Cloudinary URL)
         const productsWithImages = products.map(product => {
             return {
-                ...product.get({ plain: true }),
-                image_product: product.image_product ? Buffer.from(product.image_product).toString('base64') : null
+                ...product.get({ plain: true }),  // Get plain JSON from Sequelize instance
+                image_product: product.image_product  // Return the image URL as is
             };
         });
 
@@ -272,6 +321,7 @@ async function getProductsByCategoryIdForNonLoggedUser(req, res) {
         res.status(500).json({ error: error.message });
     }
 }
+
 
 
 

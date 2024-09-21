@@ -8,7 +8,9 @@ const {
   deleteCategoryForUser,
   getCategoriesByCommerceIdForNonLoggedUser
 } = require("../controllers/categoriesController");
+
 const authenticateJWT = require("../middleware/auth");
+
 const upload = require("../middleware/uploadMiddleware");
 
 const router = express.Router();
@@ -17,7 +19,7 @@ const router = express.Router();
 // Route to create a new category for the logged-in user
 router.post("/create-category", 
   authenticateJWT, 
-  upload.single('image_category'), 
+  upload.single('image'), 
   createCategoryForUser
 );
 
@@ -35,7 +37,7 @@ router.get('/get-category/:commerceId/:categoryId', authenticateJWT, getCategory
 router.put(
   "/update-category/:commerceId/:id", 
   authenticateJWT, 
-  upload.single('image_category'), 
+  upload.single('image'), 
   updateCategoryForUser
 );
 

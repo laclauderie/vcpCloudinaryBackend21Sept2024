@@ -24,7 +24,7 @@ const Category = sequelize.define(
       onDelete: "CASCADE",
     },
     image_category: {
-      type: DataTypes.BLOB("long"),
+      type: DataTypes.STRING
     },
   },
   {

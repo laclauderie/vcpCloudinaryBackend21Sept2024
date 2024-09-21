@@ -25,7 +25,7 @@ const Detail = sequelize.define('Detail', {
     onDelete: 'CASCADE'
   },
   image_detail: {
-    type: DataTypes.BLOB('long')
+    type: DataTypes.STRING
   }
 }, {
   tableName: 'details',

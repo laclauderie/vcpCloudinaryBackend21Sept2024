@@ -19,7 +19,7 @@ module.exports = {
         allowNull: false
       },
       image_owner: {
-        type: Sequelize.BLOB('long')
+        type: Sequelize.STRING
       },
       adresse: {
         type: Sequelize.STRING

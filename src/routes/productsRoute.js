@@ -16,7 +16,7 @@ const router = express.Router();
 router.post(
     '/create-product/:commerceId/:categoryId',
     authenticateJWT,
-    upload.single('image_product'),
+    upload.single('image'),
     createProduct
 );
 
@@ -38,7 +38,7 @@ router.get(
 router.put(
     '/update-product/:commerceId/:categoryId/:productId',
     authenticateJWT,
-    upload.single('image_product'),
+    upload.single('image'),
     updateProduct
 );
 

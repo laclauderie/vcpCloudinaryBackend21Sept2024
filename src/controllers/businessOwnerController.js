@@ -5,6 +5,9 @@ const path = require('path');
 const BusinessOwner = require("../models/businessOwnersModel");
 const User = require("../models/userModel");
 
+const { validationResult } = require('express-validator');
+const cloudinary = require('../config/cloudinaryConfig');
+
 // Constants for error messages
 const USER_NOT_FOUND = "User not found";
 const BUSINESS_OWNER_NOT_FOUND = "Business owner not found";
@@ -46,87 +49,6 @@ const getBusinessOwnerForUser = async (req, res) => {
   }
 };
 
-// Create a new business owner for the logged-in user
-const createBusinessOwnerForUser = async (req, res) => {
-  const { name, image_owner, adresse, telephone1, telephone2, role } = req.body;
-  try {
-    const user = await User.findByPk(req.user.userId); // Fetch the user details
-    if (!user) {
-      return res.status(404).json({ error: USER_NOT_FOUND });
-    }
-
-    const businessOwner = await BusinessOwner.create({
-      name,
-      image_owner,
-      adresse,
-      telephone1,
-      telephone2,
-      monthly_fee_paid: false, // Set monthly_fee_paid to false
-      role,
-      email: user.email, // Use the user's email fetched from the database
-      user_id: user.id, // Use the user's ID fetched from the database
-    });
-    res.status(201).json(businessOwner);
-  } catch (error) {
-    console.error("Error creating business owner:", error); // Improved logging
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// Update the non-image fields of the business owner for the logged-in user
-const updateBusinessOwnerNonImageFields = async (req, res) => {
-  const { name, adresse, telephone1, telephone2, monthly_fee_paid, role } = req.body;
-  try {
-    const businessOwner = await BusinessOwner.findOne({
-      where: { user_id: req.user.userId },
-    });
-    if (businessOwner) {
-      // Only update fields that are present in the request body
-      if (name !== undefined) businessOwner.name = name;
-      if (adresse !== undefined) businessOwner.adresse = adresse;
-      if (telephone1 !== undefined) businessOwner.telephone1 = telephone1;
-      if (telephone2 !== undefined) businessOwner.telephone2 = telephone2;
-      if (monthly_fee_paid !== undefined) businessOwner.monthly_fee_paid = monthly_fee_paid;
-      if (role !== undefined) businessOwner.role = role;
-
-      await businessOwner.save();
-      res.status(200).json(businessOwner);
-    } else {
-      res.status(404).json({ error: BUSINESS_OWNER_NOT_FOUND });
-    }
-  } catch (error) {
-    console.error("Error updating business owner non-image fields:", error);
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// Update the business owner's image
-const updateBusinessOwnerImage = async (req, res) => {
-  try {
-    const businessOwner = await BusinessOwner.findOne({
-      where: { user_id: req.user.userId },
-    });
-
-    if (businessOwner) {
-      if (req.file) {
-        businessOwner.image_owner = req.file.buffer; // Save the image data (buffer) directly to the database
-        await businessOwner.save();
-        res.status(200).json({
-          ...businessOwner.toJSON(), // Convert Sequelize model instance to JSON
-          image_uploaded: true // Add a flag to indicate the image was uploaded
-        });
-      } else {
-        res.status(400).json({ error: 'No image file provided' });
-      }
-    } else {
-      res.status(404).json({ error: BUSINESS_OWNER_NOT_FOUND });
-    }
-  } catch (error) {
-    console.error('Error updating business owner image:', error);
-    res.status(400).json({ error: error.message });
-  }
-};
-
 // Retrieve the business owner's image
 const getBusinessOwnerImage = async (req, res) => {
   try {
@@ -135,11 +57,11 @@ const getBusinessOwnerImage = async (req, res) => {
     });
 
     if (businessOwner && businessOwner.image_owner) {
-      res.writeHead(200, {
-        'Content-Type': 'image/jpeg', // Adjust based on the image type (e.g., image/png)
-        'Content-Length': businessOwner.image_owner.length
-      });
-      res.end(businessOwner.image_owner); // Send the image data as a response
+      // Check if image_owner contains a URL
+      const imageUrl = businessOwner.image_owner;
+
+      // Send the URL as a response
+      res.status(200).json({ imageUrl });
     } else {
       res.status(404).json({ error: 'Image not found' });
     }
@@ -183,45 +105,65 @@ const findBusinessOwnerByEmail = async (req, res) => {
   }
 };
 
-// Update business owner
+// Update business owner fields and image URL
 const updateBusinessOwner = async (req, res) => {
-  const { id } = req.params;
-  const { name, adresse, telephone1, telephone2, role, image_owner } = req.body;
+  // Validate request
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { name, adresse, telephone1, telephone2, monthly_fee_paid, role } = req.body;
 
   try {
-    const businessOwner = await BusinessOwner.findByPk(id);
+    // Retrieve the logged-in business owner using the user ID from JWT
+    const businessOwner = await BusinessOwner.findOne({
+      where: { user_id: req.user.userId },
+    });
 
-    if (!businessOwner) {
-      return res.status(404).json({ error: BUSINESS_OWNER_NOT_FOUND });
+    if (businessOwner) {
+      // Update non-image fields if present
+      if (name !== undefined) businessOwner.name = name;
+      if (adresse !== undefined) businessOwner.adresse = adresse;
+      if (telephone1 !== undefined) businessOwner.telephone1 = telephone1;
+      if (telephone2 !== undefined) businessOwner.telephone2 = telephone2;
+      if (monthly_fee_paid !== undefined) businessOwner.monthly_fee_paid = monthly_fee_paid;
+      if (role !== undefined) businessOwner.role = role;
+
+      // Handle file upload and update image URL if file is uploaded
+      if (req.file) {
+        try {
+          // Upload the image to Cloudinary with transformation (e.g., resizing to 300x300)
+          const result = await cloudinary.uploader.upload(req.file.path, {
+            folder: 'businessOwners', // Organize the image in a folder in Cloudinary (optional)
+            transformation: [
+              { width: 300, height: 300, crop: 'fill' }, // Ensure the image is resized to 300x300 and cropped to fit
+              { quality: 'auto' } // Optional: Automatically adjust image quality for optimization
+            ]
+          });
+
+          // Save the transformed image URL
+          businessOwner.image_owner = result.secure_url;
+        } catch (uploadError) {
+          console.error('Error uploading image to Cloudinary:', uploadError);
+          return res.status(500).json({ error: 'Error uploading image to Cloudinary' });
+        }
+      }
+
+      await businessOwner.save();
+      res.status(200).json(businessOwner);
+    } else {
+      res.status(404).json({ error: 'Business owner not found' });
     }
-
-    // Update business owner fields
-    businessOwner.name = name || businessOwner.name;
-    businessOwner.adresse = adresse || businessOwner.adresse;
-    businessOwner.telephone1 = telephone1 || businessOwner.telephone1;
-    businessOwner.telephone2 = telephone2 || businessOwner.telephone2;
-    businessOwner.role = role || businessOwner.role;
-
-    if (req.file) {
-      businessOwner.image_owner = req.file.buffer; // Assuming image is uploaded via multer
-    }
-
-    await businessOwner.save();
-
-    res.status(200).json(businessOwner);
   } catch (error) {
-    console.error('Error updating business owner:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error updating business owner:", error);
+    res.status(500).json({ error: 'An error occurred while updating the business owner' });
   }
 };
-
 module.exports = {
   updateBusinessOwner,
   getBusinessOwnerForUser,
-  createBusinessOwnerForUser,
-  updateBusinessOwnerNonImageFields,
   getBusinessOwnerImage,
-  updateBusinessOwnerImage,
   deleteBusinessOwnerForUser,
   findBusinessOwnerByEmail,
   getBusinessOwnerById

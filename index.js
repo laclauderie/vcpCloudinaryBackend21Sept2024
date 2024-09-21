@@ -13,6 +13,8 @@ const categoryRoute = require('./src/routes/categoryRoute');
 const productRoutes = require('./src/routes/productsRoute');
 const detailsRoute = require('./src/routes/detailsRoute');
 const villesRoute = require('./src/routes/villesRoute'); 
+
+
 const expirePaymentsJob = require('./src/jobs/expirePaymentsJob');
 
 const app = express();
@@ -39,7 +41,6 @@ app.use('/api/categories', categoryRoute);
 app.use('/api/products', productRoutes);
 app.use('/api/details', detailsRoute);
 app.use('/api/villes', villesRoute);
-
 
 // Function to run expire payments job on startup
 const runExpirePaymentsJobOnStart = async () => {

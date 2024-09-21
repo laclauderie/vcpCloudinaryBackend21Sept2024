@@ -32,7 +32,7 @@ module.exports = {
         onDelete: 'CASCADE'
       },
       image_commerce: {
-        type: Sequelize.BLOB('long'),
+        type: Sequelize.STRING,
         allowNull: true
       },
       services: {

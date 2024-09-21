@@ -15,7 +15,7 @@ const {
 const router = express.Router();
 
 // User registration
-router.post('/register', register);
+router.post('/register', register); 
 
 // User login
 router.post('/login', login);

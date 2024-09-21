@@ -1,6 +1,6 @@
 // vcpBackend/src/middleware/auth.js
 const jwt = require('jsonwebtoken');
-require('dotenv').config();
+require('dotenv').config(); 
 
 const authenticateJWT = (req, res, next) => {
   const token = req.header('Authorization');

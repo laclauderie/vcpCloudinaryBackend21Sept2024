@@ -13,13 +13,15 @@ const {
   getCommercesByVille,
   getCommerceByIdForNonLoggedUser
 } = require('../controllers/commercesController');
+
 const authenticateJWT = require('../middleware/auth');
+
 const upload = require('../middleware/uploadMiddleware');
 
 const router = express.Router();
 
 // Route to create a new commerce for the logged-in user
-router.post('/create-commerce', authenticateJWT, upload.single('image_commerce'), createCommerceForUser);
+router.post('/create-commerce', authenticateJWT, upload.single('image'), createCommerceForUser);
 
 // Route to get all commerces for the logged-in user
 router.get('/get-commerces', authenticateJWT, getCommercesForUser);
@@ -28,7 +30,7 @@ router.get('/get-commerces', authenticateJWT, getCommercesForUser);
 router.get('/get-commerce/:id', authenticateJWT, getCommerceByIdForUser);
 
 // Route to update commerce details for the logged-in user
-router.put('/update-commerce/:id', authenticateJWT, upload.single('image_commerce'), updateCommerceForUser);
+router.put('/update-commerce/:id', authenticateJWT, upload.single('image'), updateCommerceForUser);
 
 // Route to delete a commerce for the logged-in user
 router.delete('/delete-commerce/:id', authenticateJWT, deleteCommerceForUser);

@@ -14,6 +14,83 @@ const VILLE_NOT_FOUND = "Ville not found";
 // Constants for error messages
 const NO_PAID_BUSINESS_OWNERS_FOUND = "No commerces found with paid business owners";
 
+const cloudinary = require('cloudinary').v2; // Make sure Cloudinary is configured
+
+// Create a new commerce for the logged-in user
+const createCommerceForUser = async (req, res) => {
+  // Validate request
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  // Extract user ID from the JWT token (attached in the middleware)
+  const userId = req.user.userId;
+
+  // Get other fields from the request body
+  const { commerce_name, ville_name, services } = req.body;
+  
+  // Check if all required fields are provided
+  if (!commerce_name || !ville_name || !services) {
+    return res.status(400).json({ error: "All fields are required" });
+  }
+   
+  try {
+    // Find the BusinessOwner associated with the userId
+    const businessOwner = await BusinessOwner.findOne({
+      where: { user_id: userId },
+    });
+
+    // Check if a BusinessOwner was found
+    if (!businessOwner) {
+      return res.status(404).json({ error: "Business owner not found" });
+    }
+
+    // Find the Ville based on the ville_name
+    const ville = await Ville.findOne({ where: { ville_name: ville_name } });
+
+    // Check if a Ville was found
+    if (!ville) {
+      return res.status(404).json({ error: "Ville not found" });
+    }
+
+    let image_commerce = null;
+
+    // Handle file upload and update image URL if file is uploaded
+    if (req.file) {
+      try {
+        // Upload the image to Cloudinary with transformation (e.g., resizing to 300x300)
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: 'commerces', // Organize the image in a folder in Cloudinary (optional)
+          transformation: [
+            { width: 300, height: 300, crop: 'fill' }, // Ensure the image is resized to 300x300 and cropped to fit
+            { quality: 'auto' } // Optional: Automatically adjust image quality for optimization
+          ]
+        });
+        image_commerce = result.secure_url; // Save the image URL
+      } catch (uploadError) {
+        console.error('Error uploading image to Cloudinary:', uploadError);
+        return res.status(500).json({ error: 'Error uploading image to Cloudinary' });
+      }
+    }
+
+    // Create the Commerce record
+    const commerce = await Commerce.create({
+      commerce_name,
+      business_owner_id: businessOwner.id, // Use the ID from the found BusinessOwner
+      ville_id: ville.id, // Use the ID from the found Ville
+      image_commerce, // Store the Cloudinary URL
+      services,
+    });
+
+    res.status(201).json(commerce);
+  } catch (error) {
+    console.error("Error creating commerce:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+
 // Get commerce by ID for non-logged-in users
 const getCommerceByIdForNonLoggedUser = async (req, res) => {
   const { id } = req.params; // Get the commerce ID from URL parameters
@@ -102,59 +179,6 @@ const getCommercesByPaidBusinessOwners = async (req, res) => {
   }
 };
 
-/* const getCommercesByPaidBusinessOwners = async (req, res) => {
-  try {
-    const paidBusinessOwners = await BusinessOwner.findAll({
-      where: { monthly_fee_paid: true },
-      attributes: ['id'],
-    });
-
-    if (paidBusinessOwners.length === 0) {
-      return res.status(404).json({ error: 'No paid business owners found' });
-    }
-
-    const commerces = await Commerce.findAll({
-      where: {
-        business_owner_id: paidBusinessOwners.map(owner => owner.id),
-      },
-      include: [
-        {
-          model: Ville,
-          attributes: ['id', 'ville_name'],
-        },
-        {
-          model: BusinessOwner,
-          attributes: ['id', 'name'],
-        }
-      ],
-      attributes: [
-        'id',
-        'commerce_name',
-        'image_commerce',
-        'services',
-        'ville_id'
-      ]
-    });
-
-    if (commerces.length === 0) {
-      return res.status(404).json({ error: 'No commerces found for paid business owners' });
-    }
-
-    // Extract and deduplicate ville names
-    const villesSet = new Set(commerces.map(commerce => commerce.Ville.ville_name));
-
-    // Convert Set to array and sort alphabetically
-    const villes = Array.from(villesSet).sort();
-
-    res.status(200).json({ commerces, villes });
-  } catch (error) {
-    console.error("Error fetching commerces by paid business owners:", error);
-    res.status(500).json({ error: error.message });
-  }
-}; */
-
-
-
 // Get all commerces for the logged-in user
 const getCommercesForUser = async (req, res) => {
   try {
@@ -181,67 +205,6 @@ const getCommercesForUser = async (req, res) => {
   }
 };
 
-// Create a new commerce for the logged-in user
-const createCommerceForUser = async (req, res) => {
-  // Validate request
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  // Extract user ID from the JWT token (attached in the middleware)
-  const userId = req.user.userId;
-
-  // Get other fields from the request body
-  const { commerce_name, ville_name, services } = req.body;
-  const image_commerce = req.file ? req.file.buffer : null; // Get image from file upload
-
-  // Logging the received request body
-  console.log("Request body:", req.body);
-  console.log("commerce_name:", commerce_name);
-  console.log("ville_name:", ville_name);
-  console.log("services:", services);
-
-  // Check if all required fields are provided
-  if (!commerce_name || !ville_name || !services) {
-    return res.status(400).json({ error: "All fields are required" });
-  }
-
-  try {
-    // Find the BusinessOwner associated with the userId
-    const businessOwner = await BusinessOwner.findOne({
-      where: { user_id: userId },
-    });
-
-    // Check if a BusinessOwner was found
-    if (!businessOwner) {
-      return res.status(404).json({ error: "Business owner not found" });
-    }
-
-    // Find the Ville based on the ville_name
-    const ville = await Ville.findOne({ where: { ville_name: ville_name } });
-
-    // Check if a Ville was found
-    if (!ville) {
-      return res.status(404).json({ error: "Ville not found" });
-    }
-
-    // Create the Commerce record
-    const commerce = await Commerce.create({
-      commerce_name,
-      business_owner_id: businessOwner.id, // Use the ID from the found BusinessOwner
-      ville_id: ville.id, // Use the ID from the found Ville
-      image_commerce,
-      services,
-    });
-
-    res.status(201).json(commerce);
-  } catch (error) {
-    console.error("Error creating commerce:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
 // Update commerce details for the logged-in user
 const updateCommerceForUser = async (req, res) => {
   // Validate request
@@ -252,7 +215,6 @@ const updateCommerceForUser = async (req, res) => {
 
   const { id } = req.params;
   const { commerce_name, ville_name, services } = req.body;
-  const image_commerce = req.file ? req.file.buffer : null; // Get image from file upload
 
   try {
     // Find the BusinessOwner associated with the userId
@@ -282,7 +244,24 @@ const updateCommerceForUser = async (req, res) => {
       commerce.ville_id = ville.id;
     }
     if (services !== undefined) commerce.services = services;
-    if (image_commerce !== null) commerce.image_commerce = image_commerce;
+
+    // Handle file upload and update image URL if a file is uploaded
+    if (req.file) {
+      try {
+        // Upload the image to Cloudinary with transformation (e.g., resizing to 300x300)
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: 'commerces', // Optional: organize the image in a 'commerces' folder in Cloudinary
+          transformation: [
+            { width: 300, height: 300, crop: 'fill' }, // Resize the image to 300x300 and crop to fit
+            { quality: 'auto' } // Optional: automatically adjust image quality for optimization
+          ]
+        });
+        commerce.image_commerce = result.secure_url; // Save the image URL
+      } catch (uploadError) {
+        console.error('Error uploading image to Cloudinary:', uploadError);
+        return res.status(500).json({ error: 'Error uploading image to Cloudinary' });
+      }
+    }
 
     // Save the updated commerce details
     await commerce.save();
@@ -292,7 +271,6 @@ const updateCommerceForUser = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-
 
 const getCommerceByIdForUser = async (req, res) => {
   const { id } = req.params;
